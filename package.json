@@ -1,0 +1,29 @@
+{
+  "name": "nerdland-discord-podcast-player",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env src/index.js",
+    "dev": "node --env-file=.env --watch src/index.js",
+    "setup": "node setup.js",
+    "test": "node test-setup.js",
+    "scrape-episodes": "node scripts/scrape-episodes.js",
+    "download-episodes": "node scripts/download-episodes.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.18.0",
+    "axios": "^1.9.0",
+    "discord.js": "^14.19.3",
+    "ffmpeg-static": "^5.2.0",
+    "simple-json-db": "^2.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4"
+  }
+}
