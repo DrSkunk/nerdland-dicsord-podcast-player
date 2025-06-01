@@ -63,6 +63,7 @@ A Node.js Discord bot that plays episodes of the "[Nerdland Maandoverzicht](http
    - Create a new application and bot
    - Copy the bot token to your `.env` file
    - Enable the following bot permissions:
+     - Change nickname
      - Send Messages
      - Use Slash Commands
      - Connect (to voice channels)

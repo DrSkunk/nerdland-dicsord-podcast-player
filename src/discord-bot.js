@@ -426,6 +426,11 @@ export default class DiscordBot {
 			console.log(`🎵 Playing local file: ${activity}`);
 			this.updateBotActivity(activity);
 
+			// Set bot nickname to episode title if possible
+			const episodeTitle = fileData.title;
+			const guild = voiceChannel.guild;
+			await this.setBotNickname(episodeTitle, guild);
+
 			// Send embed if interaction is provided and has editReply method
 			if (interaction?.editReply) {
 				const embed = this.createEpisodeEmbed(fileData, embedType);
@@ -455,6 +460,11 @@ export default class DiscordBot {
 
 		// Reset bot activity when playback stops
 		this.updateBotActivity("Nerdland Podcast Player");
+
+		// Reset bot nickname to default when playback stops
+		if (interaction?.guild) {
+			await this.setBotNickname("Nerdland Podcast Player", interaction.guild);
+		}
 
 		const embed = new EmbedBuilder()
 			.setColor(0xff6b6b)
@@ -788,5 +798,29 @@ export default class DiscordBot {
 		}
 
 		return embed;
+	}
+
+	/**
+	 * Set the bot's nickname in the server to the episode title
+	 * @param {string} episodeTitle - The episode title to set as nickname
+	 * @param {object} guild - The Discord guild (server) object
+	 */
+	async setBotNickname(episodeTitle, guild) {
+		try {
+			if (!guild) return;
+			const me = await guild.members.fetchMe();
+			if (me?.manageable) {
+				// Discord nickname max length is 32 chars
+				const nickname = episodeTitle.substring(0, 32);
+				await me.setNickname(nickname);
+				console.log(`🤖 Updated bot nickname to: ${nickname}`);
+			} else {
+				console.warn(
+					"⚠️  Bot cannot change its nickname (missing permission or not manageable)",
+				);
+			}
+		} catch (error) {
+			console.error("❌ Error setting bot nickname:", error);
+		}
 	}
 }
