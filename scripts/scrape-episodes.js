@@ -256,6 +256,21 @@ async function getStreamUrl(track) {
 }
 
 /**
+ * Extract chapters from description (timestamps and titles)
+ */
+function extractChapters(description) {
+	if (!description || typeof description !== "string") return [];
+	const chapterRegex = /\((\d{2}):(\d{2}):(\d{2})\)\s*([^\n]+)/g;
+	const chapters = Array.from(description.matchAll(chapterRegex)).map(
+		([_, hh, mm, ss, title]) => ({
+			start: `${hh}:${mm}:${ss}`,
+			title: title.trim(),
+		}),
+	);
+	return chapters;
+}
+
+/**
  * Process and format track data with database integration
  */
 async function processTrackData(tracks) {
@@ -278,6 +293,7 @@ async function processTrackData(tracks) {
 		if (showNotesUrl) {
 			console.log(`📝 Found show notes URL: ${showNotesUrl}`);
 		}
+		const chapters = extractChapters(detailedTrack.description);
 		const processedTrack = {
 			id: detailedTrack.id,
 			title: detailedTrack.title,
@@ -288,6 +304,7 @@ async function processTrackData(tracks) {
 			permalink: detailedTrack.permalink_url,
 			streamUrl: streamUrl,
 			showNotes: showNotesUrl,
+			chapters: chapters.length > 0 ? chapters : undefined,
 		};
 		await upsertEpisode(processedTrack);
 		processedStreams.push(processedTrack);
@@ -489,6 +506,7 @@ export {
 	formatDuration,
 	sanitizeFilename,
 	extractShowNotesUrl,
+	extractChapters,
 };
 
 // Run if this file is executed directly

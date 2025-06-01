@@ -8,6 +8,7 @@ import {
 	Collection,
 	EmbedBuilder,
 	ActivityType,
+	MessageFlags,
 } from "discord.js";
 import {
 	joinVoiceChannel,
@@ -109,7 +110,13 @@ export default class DiscordBot {
 				await this.handleAutocomplete(interaction);
 				return;
 			}
-
+			if (
+				interaction.isStringSelectMenu() &&
+				interaction.customId.startsWith("chapter_select")
+			) {
+				await this.handleChapterSelect(interaction);
+				return;
+			}
 			if (!interaction.isChatInputCommand()) return;
 
 			try {
@@ -119,13 +126,19 @@ export default class DiscordBot {
 				const reply = {
 					content:
 						"❌ Er is een fout opgetreden tijdens het verwerken van je commando.",
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				};
 
 				if (interaction.replied || interaction.deferred) {
-					await interaction.followUp(reply);
+					await interaction.followUp({
+						content: reply.content,
+						flags: MessageFlags.Ephemeral,
+					});
 				} else {
-					await interaction.reply(reply);
+					await interaction.reply({
+						content: reply.content,
+						flags: MessageFlags.Ephemeral,
+					});
 				}
 			}
 		});
@@ -190,6 +203,11 @@ export default class DiscordBot {
 					subcommand
 						.setName("shownotes")
 						.setDescription("Toon de shownotes van de huidige aflevering"),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName("chapters")
+						.setDescription("Toon de hoofdstukken van de huidige aflevering"),
 				),
 		];
 
@@ -218,10 +236,13 @@ export default class DiscordBot {
 			case "shownotes":
 				await this.showEpisodeNotes(interaction);
 				break;
+			case "chapters":
+				await this.showChapters(interaction);
+				break;
 			default:
 				await interaction.reply({
 					content: "❌ Onbekend commando",
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				});
 		}
 	}
@@ -267,7 +288,7 @@ export default class DiscordBot {
 		if (!this.localFiles.length) {
 			return await interaction.reply({
 				content: "❌ Geen afleveringen beschikbaar",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -284,7 +305,7 @@ export default class DiscordBot {
 			return await interaction.reply({
 				content:
 					"❌ Geen spraakkanaal beschikbaar! Ga naar een spraakkanaal of configureer VOICE_CHANNEL_ID in je omgeving.",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -312,7 +333,7 @@ export default class DiscordBot {
 		if (!this.localFiles.length) {
 			return await interaction.reply({
 				content: "❌ Geen afleveringen beschikbaar",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -329,7 +350,7 @@ export default class DiscordBot {
 			return await interaction.reply({
 				content:
 					"❌ Geen spraakkanaal beschikbaar! Ga naar een spraakkanaal of configureer VOICE_CHANNEL_ID in je omgeving.",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -446,7 +467,7 @@ export default class DiscordBot {
 		if (!this.player || this.player.state.status === AudioPlayerStatus.Idle) {
 			return await interaction.reply({
 				content: "❌ Er wordt momenteel geen audio afgespeeld",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -478,7 +499,7 @@ export default class DiscordBot {
 		if (!this.currentEpisode) {
 			return await interaction.reply({
 				content: "❌ Er wordt momenteel geen aflevering afgespeeld",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -487,7 +508,7 @@ export default class DiscordBot {
 		if (!episodeData) {
 			return await interaction.reply({
 				content: "❌ Geen shownotes beschikbaar voor deze aflevering",
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -497,164 +518,116 @@ export default class DiscordBot {
 		await interaction.reply({ content: showNotesUrl });
 	}
 
-	async handleAutocomplete(interaction) {
-		const focusedOption = interaction.options.getFocused();
-		const query = focusedOption.toLowerCase();
-
-		// Get categorized episodes for autocomplete
-		const monthlyEpisodes = this.getMonthlyEpisodes();
-		const specialEpisodes = this.getSpecialEpisodes();
-
-		const choices = [];
-
-		// Add monthly episodes (most recent first)
-		const filteredMonthly = monthlyEpisodes
-			.filter((ep) => ep.title.toLowerCase().includes(query))
-			.slice(0, 15); // Limit to avoid hitting Discord's 25 choice limit
-		for (const ep of filteredMonthly) {
-			choices.push({
-				name: ep.title,
-				value: ep.id.toString(),
+	async showChapters(interaction, startIdx = 0) {
+		if (!this.currentEpisode) {
+			return await interaction.reply({
+				content: "❌ Er wordt momenteel geen aflevering afgespeeld",
+				flags: MessageFlags.Ephemeral,
 			});
 		}
-
-		// Add special episodes if we have room
-		const remainingSlots = 25 - choices.length;
-		if (remainingSlots > 0) {
-			const filteredSpecial = specialEpisodes
-				.filter((ep) => ep.title.toLowerCase().includes(query))
-				.slice(0, remainingSlots);
-			for (const ep of filteredSpecial) {
-				choices.push({
-					name: ep.title,
-					value: ep.id.toString(),
-				});
-			}
+		const episodeData = this.findEpisodeData(this.currentEpisode.filename);
+		if (
+			!episodeData ||
+			!episodeData.chapters ||
+			episodeData.chapters.length === 0
+		) {
+			return await interaction.reply({
+				content: "❌ Geen hoofdstukken gevonden voor deze aflevering",
+				flags: MessageFlags.Ephemeral,
+			});
 		}
-
-		await interaction.respond(choices);
+		const { ActionRowBuilder, StringSelectMenuBuilder } = await import(
+			"discord.js"
+		);
+		const maxOptions = 24; // 24 chapters + 1 for 'Show more'
+		const totalChapters = episodeData.chapters.length;
+		const endIdx = Math.min(startIdx + maxOptions, totalChapters);
+		const options = episodeData.chapters
+			.slice(startIdx, endIdx)
+			.map((ch, idx) => ({
+				label: ch.title.substring(0, 100),
+				value: String(startIdx + idx),
+				description: ch.start,
+			}));
+		if (endIdx < totalChapters) {
+			options.push({
+				label: "➡️ Toon meer hoofdstukken...",
+				value: `show_more_${endIdx}`,
+				description: `Hoofdstukken ${endIdx + 1} - ${Math.min(endIdx + maxOptions, totalChapters)}`,
+			});
+		}
+		const selectMenu = new StringSelectMenuBuilder()
+			.setCustomId(`chapter_select:${startIdx}`)
+			.setPlaceholder("Kies een hoofdstuk...")
+			.addOptions(options);
+		const row = new ActionRowBuilder().addComponents(selectMenu);
+		let content = `📖 Kies een hoofdstuk om naar te springen: (${startIdx + 1}-${endIdx} van ${totalChapters})`;
+		if (startIdx === 0 && totalChapters > maxOptions) {
+			content += `\n⚠️ Niet alle hoofdstukken worden getoond. Gebruik 'Toon meer' om verder te bladeren.`;
+		}
+		if (interaction.replied || interaction.deferred) {
+			await interaction.followUp({
+				content,
+				components: [row],
+				flags: MessageFlags.Ephemeral,
+			});
+		} else {
+			await interaction.reply({
+				content,
+				components: [row],
+				flags: MessageFlags.Ephemeral,
+			});
+		}
 	}
 
-	async playSpecificEpisode(interaction) {
-		const episodeId = interaction.options.getString("episode");
-
-		if (!episodeId) {
+	async handleChapterSelect(interaction) {
+		if (!this.currentEpisode) {
 			return await interaction.reply({
-				content: "❌ Geen aflevering geselecteerd",
-				ephemeral: true,
+				content: "❌ Er wordt momenteel geen aflevering afgespeeld",
+				flags: MessageFlags.Ephemeral,
 			});
 		}
-
-		// Find the episode in our database
-		const episodeData = this.episodes.find(
-			(ep) => ep.id.toString() === episodeId,
-		);
-		if (!episodeData) {
+		const episodeData = this.findEpisodeData(this.currentEpisode.filename);
+		if (
+			!episodeData ||
+			!episodeData.chapters ||
+			episodeData.chapters.length === 0
+		) {
 			return await interaction.reply({
-				content: "❌ Aflevering niet gevonden in database",
-				ephemeral: true,
+				content: "❌ Geen hoofdstukken gevonden voor deze aflevering",
+				flags: MessageFlags.Ephemeral,
 			});
 		}
-
-		// Find corresponding local file
-		const localFile = this.localFiles.find((file) => {
-			const fileId = file.filename.match(/_(\d+)\.mp3$/)?.[1];
-			return fileId === episodeId;
-		});
-
-		if (!localFile) {
+		const customId = interaction.customId || "chapter_select:0";
+		const startIdx = Number(customId.split(":")[1] || 0);
+		const selectedValue = interaction.values[0];
+		if (selectedValue.startsWith("show_more_")) {
+			const nextStart = Number(selectedValue.replace("show_more_", ""));
+			await interaction.deferUpdate();
+			await this.showChapters(interaction, nextStart);
+			return;
+		}
+		const idx = Number.parseInt(selectedValue, 10);
+		const chapter = episodeData.chapters[idx];
+		if (!chapter) {
 			return await interaction.reply({
-				content:
-					"❌ Afleveringsbestand niet lokaal gevonden. Download de aflevering eerst met `npm run download-episodes`.",
-				ephemeral: true,
+				content: "❌ Hoofdstuk niet gevonden",
+				flags: MessageFlags.Ephemeral,
 			});
 		}
-
+		await interaction.deferUpdate();
 		const member = interaction.member;
 		const userVoiceChannel = member?.voice?.channel;
-
-		// Get the target voice channel (configured or user's channel)
 		const targetVoiceChannel = await this.getTargetVoiceChannel(
 			interaction,
 			userVoiceChannel,
 		);
-
-		if (!targetVoiceChannel) {
-			return await interaction.reply({
-				content:
-					"❌ Geen spraakkanaal beschikbaar! Ga naar een spraakkanaal of configureer VOICE_CHANNEL_ID in je omgeving.",
-				ephemeral: true,
-			});
-		}
-
-		await interaction.deferReply();
-
-		try {
-			await this.playLocalFile(
-				localFile,
-				targetVoiceChannel,
-				interaction,
-				"specific",
-			);
-		} catch (error) {
-			console.error("❌ Error playing specific episode:", error);
-			await interaction.editReply({
-				content: "❌ Kon de geselecteerde aflevering niet afspelen",
-			});
-		}
-	}
-
-	getMonthlyEpisodes() {
-		return this.episodes
-			.filter((ep) => ep.title.includes("Nerdland Maandoverzicht:"))
-			.sort(
-				(a, b) =>
-					new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-			); // Most recent first
-	}
-
-	getSpecialEpisodes() {
-		return this.episodes
-			.filter((ep) => ep.title.includes("Nerdland Special:"))
-			.sort(
-				(a, b) =>
-					new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-			); // Most recent first
-	}
-
-	/**
-	 * Auto-start playback when the bot is ready (no interaction required)
-	 */
-	async autoStartPlayback() {
-		try {
-			console.log("🎵 Attempting to auto-start playback...");
-
-			// Check if we have episodes available
-			if (!this.localFiles.length) {
-				console.log("❌ No episodes available for auto-start");
-				return;
-			}
-
-			// Get the configured voice channel
-			const targetVoiceChannel = await this.getConfiguredVoiceChannel();
-
-			if (!targetVoiceChannel) {
-				console.log(
-					"❌ No voice channel configured for auto-start. Set VOICE_CHANNEL_ID in your .env file",
-				);
-				return;
-			}
-
-			// Get the latest local file (assuming they're sorted by date)
-			const latestFile = this.localFiles[this.localFiles.length - 1];
-			console.log(`🎵 Auto-starting with latest episode: ${latestFile.title}`);
-
-			await this.playLocalFile(latestFile, targetVoiceChannel);
-
-			console.log("✅ Auto-playback started successfully");
-		} catch (error) {
-			console.error("❌ Error during auto-start playback:", error);
-		}
+		await this.seekToChapter(
+			this.currentEpisode,
+			targetVoiceChannel,
+			chapter.start,
+			interaction,
+		);
 	}
 
 	/**
@@ -691,6 +664,41 @@ export default class DiscordBot {
 				error,
 			);
 			return null;
+		}
+	}
+
+	/**
+	 * Auto-start playback when the bot is ready (no interaction required)
+	 */
+	async autoStartPlayback() {
+		try {
+			console.log("🎵 Attempting to auto-start playback...");
+
+			// Check if we have episodes available
+			if (!this.localFiles.length) {
+				console.log("❌ No episodes available for auto-start");
+				return;
+			}
+
+			// Get the configured voice channel
+			const targetVoiceChannel = await this.getConfiguredVoiceChannel();
+
+			if (!targetVoiceChannel) {
+				console.log(
+					"❌ No voice channel configured for auto-start. Set VOICE_CHANNEL_ID in your .env file",
+				);
+				return;
+			}
+
+			// Get the latest local file (assuming they're sorted by date)
+			const latestFile = this.localFiles[this.localFiles.length - 1];
+			console.log(`🎵 Auto-starting with latest episode: ${latestFile.title}`);
+
+			await this.playLocalFile(latestFile, targetVoiceChannel);
+
+			console.log("✅ Auto-playback started successfully");
+		} catch (error) {
+			console.error("❌ Error during auto-start playback:", error);
 		}
 	}
 
@@ -821,6 +829,155 @@ export default class DiscordBot {
 			}
 		} catch (error) {
 			console.error("❌ Error setting bot nickname:", error);
+		}
+	}
+
+	async seekToChapter(fileData, voiceChannel, timestamp, interaction) {
+		try {
+			if (this.connection) {
+				this.connection.destroy();
+				this.connection = null;
+			}
+			if (this.player) {
+				this.player.stop();
+			}
+			// Parse timestamp (hh:mm:ss)
+			const [hh, mm, ss] = timestamp.split(":").map(Number);
+			if (isNaN(hh) || isNaN(mm) || isNaN(ss)) {
+				throw new Error(`Invalid timestamp format: ${timestamp}`);
+			}
+			const seconds = hh * 3600 + mm * 60 + ss;
+			// Use direct ffmpeg subprocess to seek to the timestamp
+			const { createAudioResource } = await import("@discordjs/voice");
+			const { createFfmpegStream } = await import("./ffmpeg-stream.js");
+			const ffmpegStream = createFfmpegStream(fileData.path, seconds);
+			// Join voice channel if not already connected
+			if (voiceChannel && !this.connection) {
+				this.connection = joinVoiceChannel({
+					channelId: voiceChannel.id,
+					guildId: voiceChannel.guild.id,
+					adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+				});
+			}
+			const resource = createAudioResource(ffmpegStream);
+			this.player.play(resource);
+			if (this.connection) {
+				this.connection.subscribe(this.player);
+			}
+			this.currentEpisode = fileData;
+			const activity = fileData.title
+				.replace("Nerdland Maandoverzicht:", "")
+				.replace("Nerdland Special:", "")
+				.trim();
+			this.updateBotActivity(activity);
+			const episodeTitle = fileData.title;
+			const guild = voiceChannel.guild;
+			await this.setBotNickname(episodeTitle, guild);
+			if (interaction?.editReply) {
+				const embed = this.createEpisodeEmbed(fileData, "playing");
+				await interaction.editReply({ embeds: [embed] });
+			}
+		} catch (error) {
+			console.error("❌ Error seeking to chapter:", error);
+			if (interaction?.editReply) {
+				await interaction.editReply({
+					content: "❌ Kon niet naar het hoofdstuk springen",
+				});
+			}
+		}
+	}
+
+	async handleAutocomplete(interaction) {
+		const focusedOption = interaction.options.getFocused();
+		const query = focusedOption.toLowerCase();
+
+		// Get categorized episodes for autocomplete
+		const monthlyEpisodes = this.episodes
+			.filter((ep) => ep.title?.includes("Nerdland Maandoverzicht:"))
+			.sort(
+				(a, b) =>
+					new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+			);
+		const specialEpisodes = this.episodes
+			.filter((ep) => ep.title?.includes("Nerdland Special:"))
+			.sort(
+				(a, b) =>
+					new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+			);
+
+		const choices = [];
+		const filteredMonthly = monthlyEpisodes
+			.filter((ep) => ep.title.toLowerCase().includes(query))
+			.slice(0, 15);
+		for (const ep of filteredMonthly) {
+			choices.push({ name: ep.title, value: ep.id.toString() });
+		}
+		const remainingSlots = 25 - choices.length;
+		if (remainingSlots > 0) {
+			const filteredSpecial = specialEpisodes
+				.filter((ep) => ep.title.toLowerCase().includes(query))
+				.slice(0, remainingSlots);
+			for (const ep of filteredSpecial) {
+				choices.push({ name: ep.title, value: ep.id.toString() });
+			}
+		}
+		await interaction.respond(choices);
+	}
+
+	async playSpecificEpisode(interaction) {
+		const episodeId = interaction.options.getString("episode");
+		if (!episodeId) {
+			return await interaction.reply({
+				content: "❌ Geen aflevering geselecteerd",
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+		const episodeData = this.episodes.find(
+			(ep) => ep.id && ep.id.toString() === episodeId,
+		);
+		if (!episodeData) {
+			return await interaction.reply({
+				content: "❌ Aflevering niet gevonden in database",
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+		const localFile = this.localFiles.find((file) => {
+			const fileId = file.filename.match(/_(\d+)\.mp3$/)?.[1];
+			return fileId === episodeId;
+		});
+		if (!localFile) {
+			return await interaction.reply({
+				content:
+					"❌ Afleveringsbestand niet lokaal gevonden. Download de aflevering eerst met `npm run download-episodes`.",
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+		const member = interaction.member;
+		const userVoiceChannel = member?.voice?.channel;
+		const targetVoiceChannel = await this.getTargetVoiceChannel(
+			interaction,
+			userVoiceChannel,
+		);
+		if (!targetVoiceChannel) {
+			return await interaction.reply({
+				content:
+					"❌ Geen spraakkanaal beschikbaar! Ga naar een spraakkanaal of configureer VOICE_CHANNEL_ID in je omgeving.",
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+		await interaction.deferReply();
+		try {
+			await this.playLocalFile(
+				localFile,
+				targetVoiceChannel,
+				interaction,
+				"specific",
+			);
+		} catch (error) {
+			console.error("❌ Error playing specific episode:", error);
+			await interaction.editReply({
+				content: "❌ Kon de geselecteerde aflevering niet afspelen",
+			});
 		}
 	}
 }
