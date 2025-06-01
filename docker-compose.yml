@@ -1,0 +1,12 @@
+services:
+  nerdland-discord-bot:
+    build: .
+    container_name: nerdland-discord-bot
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - GUILD_ID=${GUILD_ID}
+      - VOICE_CHANNEL_ID=${VOICE_CHANNEL_ID}
+    volumes:
+      - ./downloads:/app/downloads
+      - ./episodes.json:/app/episodes.json
+    restart: unless-stopped
