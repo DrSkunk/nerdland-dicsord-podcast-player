@@ -17,6 +17,7 @@ import {
 	AudioPlayerStatus,
 	VoiceConnectionStatus,
 } from "@discordjs/voice";
+import { askNerdlandAssistant } from "./nerdland-assistant.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -208,6 +209,17 @@ export default class DiscordBot {
 					subcommand
 						.setName("chapters")
 						.setDescription("Toon de hoofdstukken van de huidige aflevering"),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName("ask")
+						.setDescription("Stel een vraag aan de Nerdland Assistent")
+						.addStringOption((option) =>
+							option
+								.setName("question")
+								.setDescription("Je vraag voor de Nerdland Assistent")
+								.setRequired(true),
+						),
 				),
 		];
 
@@ -219,6 +231,11 @@ export default class DiscordBot {
 
 	async handleCommand(interaction) {
 		const subcommand = interaction.options.getSubcommand();
+		const commandName = interaction.commandName;
+		if (commandName === "podcast" && subcommand === "ask") {
+			await this.handleAssistantAsk(interaction);
+			return;
+		}
 
 		switch (subcommand) {
 			case "play":
@@ -843,7 +860,7 @@ export default class DiscordBot {
 			}
 			// Parse timestamp (hh:mm:ss)
 			const [hh, mm, ss] = timestamp.split(":").map(Number);
-			if (isNaN(hh) || isNaN(mm) || isNaN(ss)) {
+			if (Number.isNaN(hh) || Number.isNaN(mm) || Number.isNaN(ss)) {
 				throw new Error(`Invalid timestamp format: ${timestamp}`);
 			}
 			const seconds = hh * 3600 + mm * 60 + ss;
@@ -977,6 +994,28 @@ export default class DiscordBot {
 			console.error("❌ Error playing specific episode:", error);
 			await interaction.editReply({
 				content: "❌ Kon de geselecteerde aflevering niet afspelen",
+			});
+		}
+	}
+
+	async handleAssistantAsk(interaction) {
+		const question = interaction.options.getString("question");
+		if (!question) {
+			await interaction.reply({
+				content: "❌ Geen vraag opgegeven.",
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+		await interaction.deferReply();
+		try {
+			const answer = await askNerdlandAssistant(question);
+			await interaction.editReply({ content: answer });
+		} catch (error) {
+			console.error("❌ Error asking Nerdland Assistant:", error);
+			await interaction.editReply({
+				content:
+					"❌ Er ging iets mis bij het vragen aan de Nerdland Assistent.",
 			});
 		}
 	}
