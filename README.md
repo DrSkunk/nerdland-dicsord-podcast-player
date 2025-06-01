@@ -20,6 +20,8 @@ A Node.js Discord bot that plays episodes of the "[Nerdland Maandoverzicht](http
 - `/podcast random` - Play a random episode from the Nerdland podcast archive
 - `/podcast episode` - Play a specific episode with autocomplete search
 - `/podcast shownotes` - Display the show notes of the currently playing episode
+- `/podcast chapters` - Display and jump to chapters of the current episode
+- `/podcast ask` - Ask a question to the Nerdland Assistant (AI)
 
 ## Setup
 
