@@ -18,6 +18,7 @@ import {
 	VoiceConnectionStatus,
 } from "@discordjs/voice";
 import { askNerdlandAssistant } from "./nerdland-assistant.js";
+import { scrapeEpisodes, downloadEpisodes } from "./episodes-manager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -220,6 +221,13 @@ export default class DiscordBot {
 								.setDescription("Je vraag voor de Nerdland Assistent")
 								.setRequired(true),
 						),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName("update")
+						.setDescription(
+							"[Moderator] Update database en download nieuwe afleveringen",
+						),
 				),
 		];
 
@@ -255,6 +263,9 @@ export default class DiscordBot {
 				break;
 			case "chapters":
 				await this.showChapters(interaction);
+				break;
+			case "update":
+				await this.handleUpdateEpisodes(interaction);
 				break;
 			default:
 				await interaction.reply({
@@ -1016,6 +1027,74 @@ export default class DiscordBot {
 			await interaction.editReply({
 				content:
 					"❌ Er ging iets mis bij het vragen aan de Nerdland Assistent.",
+			});
+		}
+	}
+
+	/**
+	 * Moderator-only: Update database and download new episodes
+	 */
+	async handleUpdateEpisodes(interaction) {
+		// Only allow users with MANAGE_GUILD permission
+		if (!interaction.memberPermissions?.has("ManageGuild")) {
+			await interaction.reply({
+				content: "❌ Je hebt geen toestemming om dit commando uit te voeren.",
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+		await interaction.reply({
+			content:
+				"🔄 Database wordt bijgewerkt en nieuwe afleveringen worden gedownload. Dit kan enkele minuten duren...",
+			flags: MessageFlags.Ephemeral,
+		});
+		try {
+			await scrapeEpisodes();
+			await downloadEpisodes();
+			this.loadData();
+			await interaction.followUp({
+				content: "✅ Database en afleveringen zijn bijgewerkt!",
+				flags: MessageFlags.Ephemeral,
+			});
+		} catch (error) {
+			console.error("❌ Fout bij updaten:", error);
+			await interaction.followUp({
+				content:
+					"❌ Er is een fout opgetreden bij het bijwerken van de database of het downloaden van afleveringen.",
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+	}
+
+	async updateEpisodes(interaction) {
+		await interaction.deferReply({ ephemeral: true });
+		try {
+			// Reload data to get the latest episode list
+			this.loadData();
+
+			// Send initial reply
+			await interaction.editReply({
+				content:
+					"🔄 Bezig met het bijwerken van de database en het downloaden van nieuwe afleveringen...",
+			});
+
+			// Here you would add the logic to update the database and download new episodes
+			// For example, calling a script or a function that handles the download
+
+			// Simulate update process
+			setTimeout(async () => {
+				// After update, reload data to refresh episodes and local files
+				this.loadData();
+
+				await interaction.editReply({
+					content: `✅ Database bijgewerkt! Er zijn nu ${this.episodes.length} afleveringen beschikbaar.`,
+				});
+			}, 3000);
+		} catch (error) {
+			console.error("❌ Error updating episodes:", error);
+			await interaction.editReply({
+				content:
+					"❌ Er is een fout opgetreden tijdens het bijwerken van de afleveringen.",
 			});
 		}
 	}
