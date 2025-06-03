@@ -22,6 +22,7 @@ A Node.js Discord bot that plays episodes of the "[Nerdland Maandoverzicht](http
 - `/podcast shownotes` - Display the show notes of the currently playing episode
 - `/podcast chapters` - Display and jump to chapters of the current episode
 - `/podcast ask` - Ask a question to the Nerdland Assistant (AI)
+- `/podcast update` - [Moderator only] Update the episode database and download new episodes (requires Manage Server permission)
 
 ## Setup
 
@@ -176,7 +177,10 @@ Episodes are scraped from [Lieven Scheire's SoundCloud](https://soundcloud.com/l
 3. Use `/podcast random` for a random episode
 4. Use `/podcast episode` to search and play a specific episode
 5. Use `/podcast shownotes` to see information about the current episode
-6. Use `/podcast stop` to stop playback
+6. Use `/podcast chapters` to view and jump to chapters of the current episode
+7. Use `/podcast ask` to ask a question to the Nerdland Assistant
+8. Use `/podcast update` to update the database and download new episodes (**requires Manage Server permission**; moderator only)
+9. Use `/podcast stop` to stop playback
 
 When an episode finishes, the bot automatically plays a random episode from the archive.
 
